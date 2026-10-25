@@ -20,6 +20,7 @@ import { runSteps } from './src/engine.ts';
 import { createLogger, errorLine } from './src/logger.ts';
 import { trackNetwork } from './src/network.ts';
 import { resolveParams } from './src/params.ts';
+import { askForSecrets, terminalAsk, type Ask } from './src/prompt.ts';
 import { makeMasker, normalizeSecretSpecs, resolveSecrets, withoutSecretArgs } from './src/secrets.ts';
 import { formatSummary, StatsRecorder } from './src/stats.ts';
 
@@ -33,25 +34,31 @@ interface Setup {
   readonly secrets: Readonly<Record<string, string>>;
 }
 
-/** Read the playbook, inputs and secrets. Any problem throws before a browser opens. */
-function setup(file: string, cli: Readonly<Record<string, string>>): Setup {
+/**
+ * Read the playbook, inputs and secrets. Any problem throws before a browser opens.
+ * Secrets missing from .env and the command line are asked for when `ask` is given.
+ */
+async function setup(file: string, cli: Readonly<Record<string, string>>, ask?: Ask): Promise<Setup> {
   try {
     process.loadEnvFile(resolve('.env'));
   } catch {
-    // no .env file: secrets may still come from the command line or the environment
+    // no .env file: secrets may still come from the command line, the environment or a prompt
   }
   const pb = parse(readFileSync(file, 'utf8')) as Record<string, unknown>;
   if (!pb || !Array.isArray(pb.steps)) throw new Error(`${file} has no "steps:" list`);
   const specs = normalizeSecretSpecs(pb.secrets);
-  const { values, missing } = resolveSecrets(specs, cli, process.env);
-  if (missing.length) {
-    throw new Error(`Missing secret(s): ${missing.join(', ')}. Add NAME="..." to .env in this folder.`);
-  }
+  // params first, so a missing term is reported before anyone types a password
   const vars = {
     date: new Date().toISOString().slice(0, 10),
     ...resolveParams(pb.params, withoutSecretArgs(cli, specs), process.env),
   };
-  return { pb, vars, secrets: values };
+  const { values, missing } = resolveSecrets(specs, cli, process.env);
+  const asked = missing.length && ask ? await askForSecrets(missing, ask) : {};
+  const stillMissing = missing.filter((name) => !asked[name]);
+  if (stillMissing.length) {
+    throw new Error(`Missing secret(s): ${stillMissing.join(', ')}. Add NAME="..." to .env in this folder.`);
+  }
+  return { pb, vars, secrets: { ...values, ...asked } };
 }
 
 async function main(): Promise<number> {
@@ -62,7 +69,8 @@ async function main(): Promise<number> {
   }
   let s: Setup;
   try {
-    s = setup(args.file, args.vars);
+    const atTerminal = process.stdin.isTTY && process.stdout.isTTY;
+    s = await setup(args.file, args.vars, atTerminal ? terminalAsk() : undefined);
   } catch (e: unknown) {
     process.stderr.write(`FAILED: ${errorLine(e)}\n`);
     return 1;

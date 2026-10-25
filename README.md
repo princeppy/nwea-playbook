@@ -35,6 +35,17 @@ The C# runner takes the same arguments:
 
 Each `run.sh` works from any folder: it installs or builds in its own folder, then runs from the repo root. On the first run, `nodejs/run.sh` installs the npm packages and Playwright's Chromium; `dotnet/run.sh` builds the project and installs Chromium. After that, `dotnet/run.sh` rebuilds incrementally on every run, which is quick when nothing has changed.
 
+### Run with `npx` from any folder
+
+No install needed. Point `npx` at the `nodejs/` folder of this repo:
+
+```bash
+cd ~/somewhere
+npx /Volumes/Projects/playbook-lab/nodejs "Spring 2025-2026" --headed
+```
+
+It works in the current folder: `.env` is read from it, and `downloads/` and `runs/` are written to it. The repo's `nwea-class-profile.yaml` is used unless you name another playbook. Without a `.env`, it asks for the username and password at the terminal (the password is not shown); the term is then the first argument. Chromium is installed on first use.
+
 **Requirements:** Node.js 22 or newer (`nodejs/`), or the .NET 10 SDK (`dotnet/`); macOS/Linux shell.
 
 ### `.env` (never committed)
@@ -68,7 +79,7 @@ Without `run.sh` (from the repo root): `nodejs/node_modules/.bin/tsx nodejs/run.
 
 | Input | Source | Notes |
 |---|---|---|
-| Username / password | `NWEA_USER` / `NWEA_PASS` in `.env`, or `user=` / `pass=` | Checked before the browser opens; masked in console and `run.log` |
+| Username / password | `NWEA_USER` / `NWEA_PASS` in `.env`, or `user=` / `pass=`; if neither, the Node runner asks at the terminal | Checked before the browser opens; masked in console and `run.log` |
 | Term tested | `NWEA_TERM` in `.env`, or the first argument / `term=` | Required |
 
 **Term format:** season + academic year, exactly as in NWEA's Term dropdowns:
@@ -265,6 +276,7 @@ downloads/, runs/          CSVs, run logs, screenshots (shared, git-ignored)
 nodejs/
   run.sh                 entry point for people (checks Node, installs on first run, passes the term)
   run.ts                 entry point for the runner: inputs, secrets, browser, summary, exit code
+  bin/nwea-playbook.mjs  what `npx <repo>/nodejs` runs; src/launch.ts its arguments
   package.json, tsconfig.json
   src/engine.ts          runs steps and forEach loops
   src/sources.ts         forEach item sources: dropdown options, radio buttons
@@ -273,6 +285,7 @@ nodejs/
   src/locators.ts        YAML locator → Playwright locator; choose()
   src/term.ts            term and season rules         src/queue.ts    queue-row parsing
   src/params.ts          params (CLI > env > default)  src/secrets.ts  secrets and masking
+  src/prompt.ts          asks at the terminal for secrets missing from .env and the command line
   src/network.ts         AJAX-quiet detection          src/stats.ts    summary counts
   src/args.ts, logger.ts, text.ts, vars.ts            CLI parsing, logging, text and ${var} helpers
   test/                  unit tests + browser tests against local stand-in pages (test/fixtures)
@@ -294,7 +307,7 @@ Node.js:
 
 ```bash
 cd nodejs
-npm test            # 36 tests: unit + integration (headless Chromium, no network)
+npm test            # 41 tests: unit + integration (headless Chromium, no network)
 npm run coverage    # coverage report (about 96% of lines)
 npm run typecheck   # tsc, strict
 ```
@@ -338,7 +351,7 @@ A quick trial: add `limit: 1` under `as: teacher` (and under `as: period`) in th
 |---|---|
 | `Missing required input(s): term …` | Set `NWEA_TERM` in `.env` or pass a term |
 | `Term "…" is not valid` / `only tests in Fall and Spring` | Write the term as NWEA shows it; check `testedSeasons` |
-| `Missing secret(s): NWEA_USER …` | Add it to `.env` |
+| `Missing secret(s): NWEA_USER …` | Add it to `.env`, or run it at a terminal so it can ask (not from a script or cron) |
 | Run stops at login | Run with `--headed`; check `runs/<timestamp>/fatal.png` and `run.log` |
 | `"…" was not ready in the Reports Queue after 15 min` | NWEA is slow; raise `timeout:` under `nweaQueueDownload`, then rerun (finished files are skipped) |
 | `report N is still in the Reports Queue` | The file was saved; remove the row by hand |
