@@ -35,16 +35,18 @@ The C# runner takes the same arguments:
 
 Each `run.sh` works from any folder: it installs or builds in its own folder, then runs from the repo root. On the first run, `nodejs/run.sh` installs the npm packages and Playwright's Chromium; `dotnet/run.sh` builds the project and installs Chromium. After that, `dotnet/run.sh` rebuilds incrementally on every run, which is quick when nothing has changed.
 
-### Run with `npx` from any folder
-
-No install needed. Point `npx` at the `nodejs/` folder of this repo:
+### Run with `npx` from any folder (no clone, no install)
 
 ```bash
 cd ~/somewhere
-npx /Volumes/Projects/playbook-lab/nodejs "Spring 2025-2026" --headed
+npx github:princeppy/nwea-playbook "Spring 2025-2026" --headed
 ```
 
+`npx` fetches the latest `main` from GitHub. From a clone, `npx /path/to/playbook-lab` (or `.../nodejs`) runs your local copy instead.
+
 It works in the current folder: `.env` is read from it, and `downloads/` and `runs/` are written to it. The repo's `nwea-class-profile.yaml` is used unless you name another playbook. Without a `.env`, it asks for the username and password at the terminal (the password is not shown); the term is then the first argument. Chromium is installed on first use.
+
+The root `package.json` exists only for this: it names the command (`nodejs/bin/nwea-playbook.mjs`) and its runtime packages. All code and the Node development setup stay in `nodejs/`; keep the `dependencies` in both files in step.
 
 **Requirements:** Node.js 22 or newer (`nodejs/`), or the .NET 10 SDK (`dotnet/`); macOS/Linux shell.
 
@@ -271,12 +273,13 @@ The list is read once. Each later item runs `before` again, re-opens the list an
 
 ```
 nwea-class-profile.yaml    the NWEA playbook (shared by the runners)
+package.json               lets `npx github:princeppy/nwea-playbook` run nodejs/bin/nwea-playbook.mjs
 .env                       login and default term (shared, git-ignored)
 downloads/, runs/          CSVs, run logs, screenshots (shared, git-ignored)
 nodejs/
   run.sh                 entry point for people (checks Node, installs on first run, passes the term)
   run.ts                 entry point for the runner: inputs, secrets, browser, summary, exit code
-  bin/nwea-playbook.mjs  what `npx <repo>/nodejs` runs; src/launch.ts its arguments
+  bin/nwea-playbook.mjs  what `npx` runs; src/launch.ts its arguments
   package.json, tsconfig.json
   src/engine.ts          runs steps and forEach loops
   src/sources.ts         forEach item sources: dropdown options, radio buttons

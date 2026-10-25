@@ -1,0 +1,24 @@
+{
+  "name": "nwea-playbook",
+  "version": "1.5.0",
+  "private": true,
+  "type": "module",
+  "description": "Download NWEA MAP reports (ASG + Class Profile) with a YAML playbook. Run: npx github:princeppy/nwea-playbook \"Spring 2025-2026\"",
+  "bin": {
+    "nwea-playbook": "nodejs/bin/nwea-playbook.mjs"
+  },
+  "files": [
+    "nodejs/bin/",
+    "nodejs/src/",
+    "nodejs/run.ts",
+    "nwea-class-profile.yaml"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "playwright": "^1.64.1",
+    "tsx": "^4.23.15",
+    "yaml": "^2.9.1"
+  }
+}

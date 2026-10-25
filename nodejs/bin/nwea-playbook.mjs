@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Run from any folder, no install: npx <repo>/nodejs ["Spring 2025-2026"] [--headed] [--keep] [--slow=300]
-// npx links to this checkout, so edits apply at once and the repo's nwea-class-profile.yaml
-// is the default playbook.
+// Run from any folder, no install: npx github:princeppy/nwea-playbook ["Spring 2025-2026"] [--headed] [--keep] [--slow=300]
+// (or npx <repo> / npx <repo>/nodejs for a local copy)
+// The repo's nwea-class-profile.yaml is the default playbook; a local copy picks up edits at once.
 // Runs in the current folder: .env is read from it, downloads/ and runs/ are written to it.
 // Installs Playwright's Chromium on first use, then hands over to run.ts (TypeScript, via tsx).
 
