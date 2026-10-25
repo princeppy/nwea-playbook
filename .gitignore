@@ -1,5 +1,17 @@
+# dependencies
 node_modules/
+
+# output (downloaded CSVs, run logs and screenshots)
 downloads/
 runs/
+
+# secrets and saved sessions
 .env
 *-auth.json
+
+# OS / editor
+.DS_Store
+
+# .NET build output
+dotnet/**/bin/
+dotnet/**/obj/

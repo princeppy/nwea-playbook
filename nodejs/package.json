@@ -1,0 +1,22 @@
+{
+  "name": "playbook-lab",
+  "version": "1.0.0",
+  "description": "YAML playbooks that drive a browser to download NWEA MAP reports",
+  "main": "run.ts",
+  "scripts": {
+    "nwea": "cd .. && tsx nodejs/run.ts nwea-class-profile.yaml",
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "coverage": "node --import tsx --test --experimental-test-coverage \"test/**/*.test.ts\"",
+    "typecheck": "tsc -p ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "playwright": "^1.64.1",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "yaml": "^2.9.1"
+  }
+}
