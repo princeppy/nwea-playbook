@@ -18,27 +18,55 @@ export async function askForSecrets(names: readonly string[], ask: Ask): Promise
   return Object.fromEntries(answers.filter(([, v]) => v));
 }
 
+export interface TerminalPrompt {
+  readonly ask: Ask;
+  readonly close: () => void;
+}
+
+/**
+ * One readline interface for every question: a second interface on the same stdin can lose
+ * input typed quickly or pasted, and redraws over its own question.
+ */
 export function terminalAsk(
   input: NodeJS.ReadableStream = process.stdin,
   output: NodeJS.WritableStream = process.stdout,
-): Ask {
-  return (question, hidden) =>
-    new Promise((resolve) => {
-      const rl = createInterface({ input, output, terminal: true });
-      if (hidden) {
-        output.write(question);
-        // readline echoes typed characters through this method; silence it for passwords
-        (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput = () => {};
-      }
-      rl.on('SIGINT', () => {
-        rl.close();
-        output.write('\n');
-        process.exit(EXIT_INTERRUPTED);
-      });
-      rl.question(hidden ? '' : question, (answer) => {
-        rl.close();
-        if (hidden) output.write('\n');
-        resolve(answer);
-      });
-    });
+): TerminalPrompt {
+  const rl = createInterface({ input, output, terminal: true });
+  const typed: string[] = [];
+  const waiting: Array<(line: string) => void> = [];
+  let current: { readonly question: string; readonly hidden: boolean } | undefined;
+
+  // readline writes the prompt and every typed character through this method. Nothing typed
+  // ahead of a question is shown (it may be a password); for a hidden answer only the prompt is.
+  const internal = rl as unknown as { _writeToOutput: (s: string) => void };
+  const write = internal._writeToOutput.bind(rl);
+  internal._writeToOutput = (s) => {
+    if (!current) return;
+    if (!current.hidden) write(s);
+    else if (s.startsWith(current.question)) write(current.question);
+  };
+
+  rl.on('line', (line) => {
+    const next = waiting.shift();
+    if (next) next(line);
+    else typed.push(line);
+  });
+  rl.on('SIGINT', () => {
+    rl.close();
+    output.write('\n');
+    process.exit(EXIT_INTERRUPTED);
+  });
+
+  const ask: Ask = async (question, hidden) => {
+    current = { question, hidden };
+    rl.setPrompt(question);
+    rl.prompt();
+    const early = typed.shift();
+    const answer = early ?? (await new Promise<string>((resolve) => waiting.push(resolve)));
+    current = undefined;
+    // an answer typed ahead was not echoed: show it now (unless hidden) and end the line
+    if (hidden || early !== undefined) output.write(`${early !== undefined && !hidden ? early : ''}\n`);
+    return answer;
+  };
+  return { ask, close: () => rl.close() };
 }

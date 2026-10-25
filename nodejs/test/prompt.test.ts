@@ -20,19 +20,39 @@ test('isHidden covers passwords, secrets, tokens and keys', () => {
   ]);
 });
 
-test('terminalAsk shows a question and its answer, but never echoes a hidden answer', async () => {
-  const run = async (hidden: boolean): Promise<{ answer: string; shown: string }> => {
-    const input = new PassThrough();
-    const output = new PassThrough();
-    let shown = '';
-    output.on('data', (d: Buffer) => (shown += d.toString()));
-    const pending = terminalAsk(input, output)('NWEA_PASS: ', hidden);
-    input.write(' p#ss word \r\n');
-    return { answer: await pending, shown };
-  };
-  const hidden = await run(true);
-  assert.equal(hidden.answer, ' p#ss word ', 'kept exactly, spaces included');
-  assert.match(hidden.shown, /NWEA_PASS: /);
-  assert.doesNotMatch(hidden.shown, /p#ss/);
-  assert.match((await run(false)).shown, /p#ss/);
+function fakeTerminal(): { input: PassThrough; output: PassThrough; shown: () => string } {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  let shown = '';
+  output.on('data', (d: Buffer) => (shown += d.toString()));
+  return { input, output, shown: () => shown };
+}
+
+// What a terminal shows once cursor moves and line clears are applied, line by line.
+const screen = (raw: string): string[] =>
+  raw
+    .split(/\r?\n/)
+    .map((line) => line.split(/\x1b\[1G\x1b\[0[JK]/).pop()!.replace(/\x1b\[[0-9;]*[A-Za-z]/g, ''));
+
+test('terminalAsk reads answers typed in one burst and never shows a hidden answer', async () => {
+  const t = fakeTerminal();
+  const prompt = terminalAsk(t.input, t.output);
+  t.input.write('me@school.org\r p#ss word \r');
+  const user = await prompt.ask('NWEA_USER: ', false);
+  const pass = await prompt.ask('NWEA_PASS: ', true);
+  prompt.close();
+  assert.equal(user, 'me@school.org');
+  assert.equal(pass, ' p#ss word ', 'kept exactly, spaces included');
+  assert.doesNotMatch(t.shown(), /p#ss/);
+  assert.ok(screen(t.shown()).includes('NWEA_PASS: '), `password label stays on screen: ${JSON.stringify(t.shown())}`);
+  assert.ok(screen(t.shown()).some((l) => l.includes('NWEA_USER: me@school.org')));
+});
+
+test('terminalAsk waits for an answer typed after the question', async () => {
+  const t = fakeTerminal();
+  const prompt = terminalAsk(t.input, t.output);
+  const pending = prompt.ask('NWEA_PASS: ', true);
+  setTimeout(() => t.input.write('later\r'), 20);
+  assert.equal(await pending, 'later');
+  prompt.close();
 });

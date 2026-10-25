@@ -69,8 +69,12 @@ async function main(): Promise<number> {
   }
   let s: Setup;
   try {
-    const atTerminal = process.stdin.isTTY && process.stdout.isTTY;
-    s = await setup(args.file, args.vars, atTerminal ? terminalAsk() : undefined);
+    const prompt = process.stdin.isTTY && process.stdout.isTTY ? terminalAsk() : undefined;
+    try {
+      s = await setup(args.file, args.vars, prompt?.ask);
+    } finally {
+      prompt?.close();
+    }
   } catch (e: unknown) {
     process.stderr.write(`FAILED: ${errorLine(e)}\n`);
     return 1;
