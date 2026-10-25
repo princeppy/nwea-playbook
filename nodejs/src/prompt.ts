@@ -33,7 +33,9 @@ export function terminalAsk(
 ): TerminalPrompt {
   const rl = createInterface({ input, output, terminal: true });
   const typed: string[] = [];
-  const waiting: Array<(line: string) => void> = [];
+  const waiting: Array<{ readonly resolve: (line: string) => void; readonly reject: (e: Error) => void }> = [];
+  let closed = false;
+  const cancelled = (question: string): Error => new Error(`Cancelled: no answer for ${question.replace(/:\s*$/, '')}`);
   let current: { readonly question: string; readonly hidden: boolean } | undefined;
 
   // readline writes the prompt and every typed character through this method. Nothing typed
@@ -48,22 +50,33 @@ export function terminalAsk(
 
   rl.on('line', (line) => {
     const next = waiting.shift();
-    if (next) next(line);
+    if (next) next.resolve(line);
     else typed.push(line);
+  });
+  // input ended (Ctrl+D, or stdin closed): fail the question rather than leave it waiting,
+  // which would let Node exit silently with code 0
+  rl.on('close', () => {
+    closed = true;
+    if (waiting.length) output.write('\n');
+    waiting.splice(0).forEach((w) => w.reject(cancelled(current?.question ?? '')));
   });
   rl.on('SIGINT', () => {
     rl.close();
-    output.write('\n');
     process.exit(EXIT_INTERRUPTED);
   });
 
   const ask: Ask = async (question, hidden) => {
+    const early = typed.shift();
+    if (early === undefined && closed) throw cancelled(question);
     current = { question, hidden };
     rl.setPrompt(question);
     rl.prompt();
-    const early = typed.shift();
-    const answer = early ?? (await new Promise<string>((resolve) => waiting.push(resolve)));
-    current = undefined;
+    let answer: string;
+    try {
+      answer = early ?? (await new Promise<string>((resolve, reject) => waiting.push({ resolve, reject })));
+    } finally {
+      current = undefined;
+    }
     // an answer typed ahead was not echoed: show it now (unless hidden) and end the line
     if (hidden || early !== undefined) output.write(`${early !== undefined && !hidden ? early : ''}\n`);
     return answer;

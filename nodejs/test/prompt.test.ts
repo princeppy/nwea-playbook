@@ -48,6 +48,15 @@ test('terminalAsk reads answers typed in one burst and never shows a hidden answ
   assert.ok(screen(t.shown()).some((l) => l.includes('NWEA_USER: me@school.org')));
 });
 
+test('terminalAsk fails instead of waiting forever when the input ends (Ctrl+D)', async () => {
+  const t = fakeTerminal();
+  const prompt = terminalAsk(t.input, t.output);
+  const pending = prompt.ask('NWEA_USER: ', false);
+  t.input.end();
+  await assert.rejects(pending, /Cancelled: no answer for NWEA_USER/);
+  await assert.rejects(prompt.ask('NWEA_PASS: ', true), /Cancelled: no answer for NWEA_PASS/);
+});
+
 test('terminalAsk waits for an answer typed after the question', async () => {
   const t = fakeTerminal();
   const prompt = terminalAsk(t.input, t.output);
