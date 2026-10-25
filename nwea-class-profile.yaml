@@ -1,0 +1,94 @@
+name: nwea-class-profile-csv
+description: Log in to NWEA MAP Reports, loop every term, instructor, subject and course, download each Class Profile CSV. Files already downloaded are skipped.
+
+secrets: [NWEA_USER, NWEA_PASS]
+
+locators:
+  termTested:   &termTested   { css: '[role="combobox"][aria-labelledby*="term-tested-label"]' }
+  termRostered: &termRostered { css: '[role="combobox"][aria-labelledby*="term-rostered-label"]' }
+  openPanel:    &openPanel    { testid: change-selection-button }
+  cancel:       &cancel       { testid: cancel-button }
+
+recover:
+  - goto: https://reports.mapnwea.org/profile/class/test-details
+  - waitFor: *openPanel
+
+steps:
+  # 1. Log in. NWEA redirects /map to its login page; we only fill and click.
+  - goto: https://reports.mapnwea.org/map
+  - waitFor: { css: '[data-test-id="input-field-login-email"]', timeout: 90000 }
+  - fill:  { css: '[data-test-id="input-field-login-email"]', secret: NWEA_USER }
+  - click: { css: '[data-test-id="continue-btn"]' }
+  - fill:  { css: '[data-test-id="input-password"]', secret: NWEA_PASS }
+  - click: { css: '[data-test-id="login-btn"]' }
+
+  # 2. NWEA does its own redirects. We just wait until the MAP home page shows the link.
+  - waitFor: { role: link, name: "Class Profile report details", timeout: 60000 }
+  - click:   { role: link, name: "Class Profile report details" }
+  - waitFor: *openPanel
+
+  # 3. Every term -> every instructor -> every subject -> every course -> download CSV
+  #    Term Tested and Term Rostered are always set to the same term.
+  #    Only the most recent term: add  limit: 1  under  as: term
+  #    Fewer teachers for a test: add  limit: 2  under  as: teacher
+  - forEach:
+      as: term
+      strip: [" (Most Recent)"]
+      before:
+        - click: *openPanel
+      optionsOf: *termTested
+      close:
+        - click: *cancel
+      do:
+        - click: *cancel
+
+        - forEach:
+            as: teacher
+            before:
+              - click:  *openPanel
+              - choose: { in: *termTested,   option: "${term}" }
+              - choose: { in: *termRostered, option: "${term}" }
+            optionsOf: { field: Instructor }
+            close:
+              - click: *cancel
+            do:
+              - click: *cancel
+
+              - forEach:
+                  as: subject
+                  before:
+                    - click:  *openPanel
+                    - choose: { in: *termTested,   option: "${term}" }
+                    - choose: { in: *termRostered, option: "${term}" }
+                    - choose: { in: { field: Instructor }, option: "${teacher}" }
+                  optionsOf: { field: Subject }
+                  close:
+                    - click: *cancel
+                  do:
+                    - click: *cancel
+
+                    - forEach:
+                        as: course
+                        onError: continue
+                        before:
+                          - click:  *openPanel
+                          - choose: { in: *termTested,   option: "${term}" }
+                          - choose: { in: *termRostered, option: "${term}" }
+                          - choose: { in: { field: Instructor }, option: "${teacher}" }
+                          - choose: { in: { field: Subject },    option: "${subject}" }
+                        optionsOf: { field: Course }
+                        close:
+                          - click: *cancel
+                        do:
+                          - skipIfExists:
+                              file: "downloads/nwea/${term_name}/${teacher}/${subject}/${course}.csv"
+                              cleanup:
+                                - click: *cancel
+                          - clickIfEnabled:
+                              target:    { role: button, name: Update }
+                              otherwise: *cancel
+                          - waitForIdle:
+                          - waitFor: { testid: downloadCSVButton }
+                          - download:
+                              click:  { testid: downloadCSVButton }
+                              saveAs: "downloads/nwea/${term_name}/${teacher}/${subject}/${course}.csv"
