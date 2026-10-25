@@ -15,3 +15,4 @@ runs/
 # .NET build output
 dotnet/**/bin/
 dotnet/**/obj/
+dotnet/TestResults/

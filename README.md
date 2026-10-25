@@ -7,7 +7,12 @@ Logs in to NWEA MAP once and downloads, for one term:
 
 All CSVs for a term go in **one flat folder**. A rerun skips files that already exist, so it only fetches what is missing.
 
-The browser steps live in a YAML **playbook** (`nwea-class-profile.yaml`). A runner carries them out. The Node.js/TypeScript runner (Playwright) is in `nodejs/`. A C# runner is planned in `dotnet/`. The playbook, `.env`, `downloads/` and `runs/` stay in the repo root, so both runners can share them.
+The browser steps live in a YAML **playbook** (`nwea-class-profile.yaml`). A runner carries them out. There are two runners, both built on Playwright. They behave the same: same steps, inputs, log lines, summary and exit codes.
+
+- `nodejs/`: Node.js / TypeScript
+- `dotnet/`: C# / .NET 10
+
+The playbook, `.env`, `downloads/` and `runs/` stay in the repo root, so both runners share them. Use either one.
 
 ---
 
@@ -20,11 +25,17 @@ The browser steps live in a YAML **playbook** (`nwea-class-profile.yaml`). A run
 ./nodejs/run.sh test                     # run the test suite
 ```
 
-`run.sh` works from any folder: it installs in `nodejs/`, then runs from the repo root.
+The C# runner takes the same arguments:
 
-On its first run, `run.sh` installs the npm packages and Playwright's Chromium.
+```bash
+./dotnet/run.sh                          # term from NWEA_TERM in .env
+./dotnet/run.sh "Fall 2026-2027" --headed
+./dotnet/run.sh test
+```
 
-**Requirements:** Node.js 22 or newer, macOS/Linux shell.
+Each `run.sh` works from any folder: it installs or builds in its own folder, then runs from the repo root. On the first run, `nodejs/run.sh` installs the npm packages and Playwright's Chromium; `dotnet/run.sh` builds the project and installs Chromium. After that, `dotnet/run.sh` rebuilds incrementally on every run, which is quick when nothing has changed.
+
+**Requirements:** Node.js 22 or newer (`nodejs/`), or the .NET 10 SDK (`dotnet/`); macOS/Linux shell.
 
 ### `.env` (never committed)
 
@@ -251,7 +262,6 @@ The list is read once. Each later item runs `before` again, re-opens the list an
 nwea-class-profile.yaml    the NWEA playbook (shared by the runners)
 .env                       login and default term (shared, git-ignored)
 downloads/, runs/          CSVs, run logs, screenshots (shared, git-ignored)
-dotnet/                    the C# runner (to come)
 nodejs/
   run.sh                 entry point for people (checks Node, installs on first run, passes the term)
   run.ts                 entry point for the runner: inputs, secrets, browser, summary, exit code
@@ -266,9 +276,21 @@ nodejs/
   src/network.ts         AJAX-quiet detection          src/stats.ts    summary counts
   src/args.ts, logger.ts, text.ts, vars.ts            CLI parsing, logging, text and ${var} helpers
   test/                  unit tests + browser tests against local stand-in pages (test/fixtures)
+dotnet/
+  run.sh                 entry point for people (checks .NET, builds, installs Chromium on first run, passes the term)
+  PlaybookLab.slnx, global.json, Directory.Build.props
+  src/PlaybookRunner/    the runner; one C# file per Node module, same names and same step types:
+    Program.cs           entry point: inputs, secrets, browser, summary, exit code (--install-browsers too)
+    Engine.cs, Sources.cs, Context.cs, Locators.cs, Steps/*.cs, Terms.cs, QueueRows.cs, Params.cs,
+    Secrets.cs, NetworkTracker.cs, Stats.cs, RunLog.cs, CliArgs.cs, TextUtil.cs, Vars.cs
+    StepArg.cs, YamlLoader.cs   YAML values (typed as the Node yaml package types them); DotEnv.cs  .env reader
+  tests/PlaybookRunner.Tests/  xUnit v3: the Node tests ported, plus step and start-up tests (Fixtures/Pages.cs
+                         holds the same stand-in pages as nodejs/test/fixtures)
 ```
 
 ### Development
+
+Node.js:
 
 ```bash
 cd nodejs
@@ -277,9 +299,20 @@ npm run coverage    # coverage report (about 96% of lines)
 npm run typecheck   # tsc, strict
 ```
 
-The integration tests serve small stand-in pages from memory: an ASG page with a System Alert and term dropdowns, a Reports Queue with confirmation and a stale report, comboboxes, and a Class Profile card. They exercise the full step engine without touching NWEA.
+C#:
 
-The runner's version and change history are at the top of `nodejs/run.ts` (currently **v1.5.0**).
+```bash
+cd dotnet
+dotnet test --solution PlaybookLab.slnx            # 66 tests: unit + integration (headless Chromium, no network)
+dotnet test --solution PlaybookLab.slnx --coverage --coverage-output-format cobertura   # about 86% of hand-written lines
+dotnet build src/PlaybookRunner -c Release         # warnings are errors (Directory.Build.props)
+```
+
+`global.json` selects the Microsoft.Testing.Platform test runner, which the .NET 10 SDK requires for xUnit v3.
+
+The integration tests serve small stand-in pages from memory: an ASG page with a System Alert and term dropdowns, a Reports Queue with confirmation and a stale report, comboboxes, and a Class Profile card. They exercise the full step engine without touching NWEA. Both runners use the same pages; if you change one copy, change the other.
+
+The runner's version and change history are at the top of `nodejs/run.ts` (currently **v1.5.0**). The C# runner tracks the same version number at the top of `dotnet/src/PlaybookRunner/Program.cs`. A change to a step should be made in both runners.
 
 ---
 
